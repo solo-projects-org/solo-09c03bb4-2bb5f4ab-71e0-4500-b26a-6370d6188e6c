@@ -1,0 +1,12 @@
+services:
+  annotator:
+    build: .
+    image: crack-slice-annotator:local
+    ports:
+      - "8000:8000"
+    volumes:
+      - annotator-data:/data
+    restart: unless-stopped
+
+volumes:
+  annotator-data:

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>裂缝切片标注交接</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1>裂缝切片标注交接</h1>
+  <div class="topbar-actions">
+    <span id="revision-badge" class="badge"></span>
+    <a id="download-link" class="button ghost" href="/api/manifest">下载标注清单</a>
+    <a class="button ghost" href="/api/sample">下载示例导入</a>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="panel">
+    <section>
+      <h2>导入裂缝框与切片框</h2>
+      <p class="hint">
+        JSON: <code>{"cracks":[{"id","x","y","w","h"}], "tiles":[...]}</code>，
+        坐标均为原图上的整数像素，切片最多 {{ max_tiles }} 个。
+      </p>
+      <form id="import-form">
+        <textarea id="import-text" rows="12" spellcheck="false">{{ sample | tojson(indent=2) }}</textarea>
+        <div class="row">
+          <input type="file" id="import-file" accept=".json,application/json">
+          <button type="submit">导入并生成计划</button>
+        </div>
+      </form>
+      <div id="import-result" class="notice hidden"></div>
+    </section>
+
+    <section>
+      <h2>切片</h2>
+      <p class="hint">绿色为正例，琥珀色为忽略（重叠部分）。</p>
+      <ul id="tile-list" class="tile-list"></ul>
+    </section>
+  </aside>
+
+  <section class="viewer">
+    <div id="empty-state" class="empty">先导入一份清单，或加载内置示例。</div>
+    <div id="viewer-body" class="hidden">
+      <div class="viewer-head">
+        <h2 id="tile-title"></h2>
+        <span id="tile-status" class="badge"></span>
+      </div>
+      <div class="canvas-wrap">
+        <svg id="slice" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="viewer-actions">
+        <button id="confirm-btn" type="button">确认此切片的标注</button>
+        <span id="confirm-result" class="notice hidden"></span>
+      </div>
+      <table class="annotations">
+        <thead><tr><th>裂缝</th><th>类型</th><th>切片内坐标 [x, y, w, h]</th></tr></thead>
+        <tbody id="annotation-body"></tbody>
+      </table>
+    </div>
+    <div id="conflict-panel" class="notice error hidden"></div>
+  </section>
+</main>
+
+<script>
+  window.INITIAL_STATE = {{ state | tojson }};
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
