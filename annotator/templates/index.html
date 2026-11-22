@@ -12,6 +12,7 @@
   <div class="topbar-actions">
     <span id="revision-badge" class="badge"></span>
     <a id="download-link" class="button ghost" href="/api/manifest">下载标注清单</a>
+    <span id="download-paused" class="badge warn hidden">清单已暂停下载</span>
     <a class="button ghost" href="/api/sample">下载示例导入</a>
   </div>
 </header>
@@ -55,6 +56,7 @@
         <button id="confirm-btn" type="button">确认此切片的标注</button>
         <span id="confirm-result" class="notice hidden"></span>
       </div>
+      <div id="drift-panel" class="notice error hidden"></div>
       <table class="annotations">
         <thead><tr><th>裂缝</th><th>类型</th><th>切片内坐标 [x, y, w, h]</th></tr></thead>
         <tbody id="annotation-body"></tbody>

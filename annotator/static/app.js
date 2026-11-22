@@ -23,8 +23,10 @@
     confirmResult: document.getElementById("confirm-result"),
     annotationBody: document.getElementById("annotation-body"),
     conflictPanel: document.getElementById("conflict-panel"),
+    driftPanel: document.getElementById("drift-panel"),
     revisionBadge: document.getElementById("revision-badge"),
     downloadLink: document.getElementById("download-link"),
+    downloadPaused: document.getElementById("download-paused"),
   };
 
   function svgEl(name, attrs) {
@@ -48,6 +50,9 @@
       els.revisionBadge.textContent = "尚无生效清单";
       els.revisionBadge.className = "badge";
       els.tileList.innerHTML = "";
+      els.downloadLink.classList.remove("hidden");
+      els.downloadPaused.classList.add("hidden");
+      renderDrift();
       renderConflicts();
       return;
     }
@@ -55,14 +60,50 @@
     els.viewerBody.classList.remove("hidden");
     const rev = state.revision;
     els.revisionBadge.textContent = `版本 r${rev.id} · ${rev.positive_tiles.length} 个正例切片`;
-    els.revisionBadge.className = "badge ok";
+    els.revisionBadge.className = rev.drift_paused ? "badge warn" : "badge ok";
+    const paused = Boolean(rev.drift_paused);
+    els.downloadLink.classList.toggle("hidden", paused);
+    els.downloadLink.setAttribute("aria-disabled", paused ? "true" : "false");
+    els.downloadPaused.classList.toggle("hidden", !paused);
     const keep = state.selectedTile;
     const exists = rev.tiles.some((t) => t.id === keep);
     state.selectedTile = exists ? keep : (rev.tiles[0] ? rev.tiles[0].id : null);
     renderTileList();
     renderTile();
+    renderDrift();
     renderConflicts();
     renderWarnings(rev);
+  }
+
+  function renderDrift() {
+    const panel = els.driftPanel;
+    const rev = state.revision;
+    const drift = (rev && rev.drift) || [];
+    if (!drift.length) {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+    panel.classList.remove("hidden");
+    panel.innerHTML = "";
+    const title = document.createElement("strong");
+    title.textContent =
+      "检测到已确认切片错位：以下切片的现行框与首次确认的原框不一致，相关切片已暂停确认，整份清单已暂停下载。";
+    panel.appendChild(title);
+    const list = document.createElement("ul");
+    for (const d of drift) {
+      const li = document.createElement("li");
+      const original = d.original_rect ? `[${d.original_rect.join(", ")}]` : "（未知）";
+      const current = d.current_rect ? `[${d.current_rect.join(", ")}]` : "（不在现行版中）";
+      li.textContent =
+        `切片 #${d.tile}：首次确认原框 ${original} → 现行框 ${current}。`;
+      list.appendChild(li);
+    }
+    panel.appendChild(list);
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = "处理方式：重新导入包含首次确认原框的切片表并重新规划；原确认与其他切片的复核进度会保留，清单随即恢复下载。";
+    panel.appendChild(hint);
   }
 
   function renderWarnings(rev) {
@@ -142,7 +183,12 @@
         i.textContent = `忽略 ${ign}`;
         counts.appendChild(i);
       }
-      if (tile.pinned) {
+      if (tile.drifted) {
+        const c = document.createElement("span");
+        c.className = "badge warn";
+        c.textContent = "已错位";
+        counts.appendChild(c);
+      } else if (tile.pinned) {
         const c = document.createElement("span");
         c.className = "badge ok";
         c.textContent = "已确认·冻结";
@@ -172,7 +218,10 @@
       return;
     }
     els.tileTitle.textContent = `切片 #${tile.id}`;
-    if (tile.pinned) {
+    if (tile.drifted) {
+      els.tileStatus.textContent = "本切片已错位";
+      els.tileStatus.className = "badge warn";
+    } else if (tile.pinned) {
       els.tileStatus.textContent = "本切片确认于旧版本，标注已原样保留";
       els.tileStatus.className = "badge ok";
     } else if (tile.confirmed) {
@@ -254,12 +303,14 @@
       els.annotationBody.appendChild(tr);
     }
 
-    els.confirmBtn.disabled = tile.confirmed && !tile.pinned;
-    els.confirmBtn.textContent = tile.confirmed && !tile.pinned
-      ? "已确认"
-      : tile.pinned
-        ? "确认沿用此切片的标注"
-        : "确认此切片的标注";
+    els.confirmBtn.disabled = tile.drifted || (tile.confirmed && !tile.pinned);
+    els.confirmBtn.textContent = tile.drifted
+      ? "已错位，确认暂停"
+      : tile.confirmed && !tile.pinned
+        ? "已确认"
+        : tile.pinned
+          ? "确认沿用此切片的标注"
+          : "确认此切片的标注";
   }
 
   async function refresh(payload) {
@@ -324,6 +375,16 @@
     els.importText.value = await file.text();
   });
 
+  els.downloadLink.addEventListener("click", (event) => {
+    if (state.revision && state.revision.drift_paused) {
+      event.preventDefault();
+      els.confirmResult.classList.remove("hidden", "good");
+      els.confirmResult.classList.add("error");
+      els.confirmResult.textContent =
+        "已确认切片错位，整份清单已暂停下载；请先重新导入首次确认的原框。";
+    }
+  });
+
   els.confirmBtn.addEventListener("click", async () => {
     const tile = state.revision.tiles.find((t) => t.id === state.selectedTile);
     if (!tile) return;
@@ -368,6 +429,10 @@
       els.confirmResult.classList.remove("hidden");
       els.confirmResult.classList.add("error");
       els.confirmResult.textContent = "页面显示的不是现行版本，已拒绝确认。视图已刷新，请复核后再确认。";
+    } else if (data && data.kind === "paused") {
+      els.confirmResult.textContent =
+        (data.errors && data.errors.join("；")) || "该切片已错位，确认已暂停。";
+      await refresh();
     } else {
       els.confirmResult.textContent = (data && data.errors && data.errors.join("；")) || "确认失败。";
     }

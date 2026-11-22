@@ -127,6 +127,21 @@ def create_app(db_path: str | None = None, *, testing: bool = False) -> Flask:
             return jsonify({"ok": False, "kind": "stale", "errors": ["当前没有生效的清单。"]}), 409
         except db.UnknownTile:
             return jsonify({"ok": False, "kind": "stale", "errors": ["该切片不在现行版本中。"]}), 409
+        except db.ConfirmationPaused as exc:
+            detail = exc.to_dict()
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "kind": "paused",
+                        "errors": [
+                            "该切片已错位，确认已暂停；请重新导入首次确认的原框。"
+                        ],
+                        "drift": detail,
+                    }
+                ),
+                409,
+            )
         return jsonify({"ok": True, **result})
 
     @app.get("/api/manifest")
@@ -135,6 +150,21 @@ def create_app(db_path: str | None = None, *, testing: bool = False) -> Flask:
         data = db.manifest(conn)
         if data is None:
             return jsonify({"ok": False, "errors": ["当前没有生效的清单。"]}), 404
+        if data.get("blocked"):
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "kind": "paused",
+                        "errors": [
+                            "已确认切片错位，整份清单已暂停下载；请先重新导入首次确认的原框。"
+                        ],
+                        "revision": data["revision"],
+                        "drift": data["drift"],
+                    }
+                ),
+                409,
+            )
         body = json.dumps(data, ensure_ascii=False, indent=2)
         return Response(
             body,
